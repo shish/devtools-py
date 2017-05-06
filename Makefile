@@ -5,3 +5,6 @@ browser_protocol.json:
 
 devtools.py: gen-devtools.py browser_protocol.json
 	python gen-devtools.py
+
+test: devtools.py
+	python -m doctest gen-devtools.py

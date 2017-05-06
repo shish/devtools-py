@@ -1,3 +1,4 @@
 browser_protocol.json
 *.pyc
 devtools.py
+__pycache__
