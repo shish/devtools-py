@@ -49,7 +49,7 @@ class _DevTools{domain}(_DevToolsDomain):
         {paramDocs}
         '''
         return self.instance.send(method="{domain}.{method}", {sendArgs})
-        """.format(
+""".format(
             domain=d['domain'],
             method=c['name'],
             args=", ".join(['self'] + [paramToPython(p) for p in params]),
@@ -62,7 +62,7 @@ class _DevTools{domain}(_DevToolsDomain):
 data += """
 
 class Client(object):
-    def __init__(self, url, tab=0):
+    def __init__(self, url, tab=-1):
         self._url = url  # FIXME
         self._tablist = requests.get("http://localhost:9222/json").json()
         for n, t in enumerate(self._tablist):
@@ -105,8 +105,8 @@ class Client(object):
 if __name__ == "__main__":
     from base64 import b64decode
 
-    c = Client("localhost:9222", 2)
-    c.page.navigate("http://www.shishnet.org", referrer='')
+    c = Client("localhost:9222")
+    c.page.navigate("http://www.shishnet.org")
     data = c.page.captureScreenshot()
     print(data['data'][:20])
     #data = b64decode(data['data'])
