@@ -77,8 +77,10 @@ def genHeader():
     data = """#!/usr/bin/env python
 
 import json
-import requests
 import websocket
+import logging
+
+log = logging.getLogger(__name__)
 
 
 class _DevToolsDomain(object):
@@ -150,25 +152,49 @@ def genClient(js):
 
     return """
 
+def _urlopen(url):
+    try:
+        from urllib import urlopen
+    except ImportError:
+        from urllib.request import urlopen
+    return urlopen(url).read().decode('utf8')
+    
+    
 class Client(object):
     def __init__(self, url, tab=-1):
         self._url = url  # FIXME
-        self._tablist = requests.get("http://localhost:9222/json").json()
-        for n, t in enumerate(self._tablist):
-            print("Tab %d" % n)
-            for k, v in t.items():
-                print("- ", k, v)
-        self._tab = websocket.create_connection(self._tablist[tab]['webSocketDebuggerUrl'])
+        self._tabList = json.loads(_urlopen("http://localhost:9222/json"))
+        self._tabs = [
+            websocket.create_connection(
+                t['webSocketDebuggerUrl']
+            ) for t in self._tabList
+        ]
+        self._tab = tab
         self._id = 0
         self._extraEvents = []
+        if tab == -1:
+            self.focus("")
 
         self.version = "{version}"
 
         {domains}
+    
+    def focus(self, tabName):
+        for n, t in enumerate(self._tabList):
+            if t['type'] == 'page' and tabName in t['title']:
+                tab = n
+                break
+        else:
+            print("Failed to focus on %s" % tabName)
+            tab = 0
+        self._tab = tab
 
     def call(self, method, args):
-        print("send[%03d] %s(%r)" % (self._id, method, args))
-        self._tab.send(json.dumps({{
+        for arg in list(args.keys()):
+            if args[arg] is None:
+                del args[arg]
+        log.debug("send[%03d] %s(%r)" % (self._id, method, args))
+        self._tabs[self._tab].send(json.dumps({{
             "id": self._id,
             "method": method,
             "params": args
@@ -176,30 +202,46 @@ class Client(object):
 
         retval = None
         while not retval:
-            data = json.loads(self._tab.recv())
-            print("recv[%03d] %s" % (data['id'], repr(data['result'])[:100]))
+            data = json.loads(self._tabs[self._tab].recv())
+            log.debug("recv[%03d] %s" % (data['id'], repr(data)[:200]))
             if data['id'] == self._id:
                 retval = data
             else:
                 self._extraEvents.append(data)
 
         self._id += 1
+        if 'error' in retval:
+            raise Exception(retval['error'])
         return retval['result']
 
 
-def _selfTest():
+def _cli():
     c = Client("localhost:9222")
-    c.page.navigate("http://www.shishnet.org")
-    data = c.page.captureScreenshot()
-    print(data['data'][:60])
+
+    for n, t in enumerate(c._tabList):
+        print("Tab %d" % n)
+        for k, v in t.items():
+            print("- %s: %s" % (k, v))
+
+    import code
+    code.interact(
+        local=c.__dict__,
+        banner='''=== DevTools Interactive Mode ===
+- Loaded modules: %s
+- have fun!''' % ", ".join([m for m in c.__dict__.keys() if m[0] != '_'])
+    )
+    
+    # c.page.navigate("http://www.shishnet.org")
+    # data = c.page.captureScreenshot()
+    # print(data['data'][:60])
     # from base64 import b64decode
     # data = b64decode(data['data'])
 
 
 if __name__ == "__main__":
-    _selfTest()
+    _cli()
 """.format(
-        version = js['version']['major'] + "." + js['version']['minor'],
+        version=js['version']['major'] + "." + js['version']['minor'],
         domains="\n        ".join([
             "self.%s = _DevTools%s(self)" % (domainToAttrName(d['domain']), d['domain'])
             for d

@@ -18,6 +18,12 @@ open('screenshot.png', 'w').write(base64.b64decode(b64data))
 ```
 
 
+# Dependencies
+
+```
+websocket-client
+```
+
 # Build
 
 ```
